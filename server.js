@@ -2,18 +2,31 @@
 import http from 'node:http';
 import { readFileSync, existsSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
-import { rank } from './public/core.js';
-import { getStatusMap } from './lib/live.js';
+import { rank, searchRadiusM } from './public/core.js';
+import { getLiveStatus } from './lib/live.js';
 
 const ROOT = new URL('.', import.meta.url).pathname;
 const stations = JSON.parse(readFileSync(join(ROOT, 'public/stations.json'), 'utf8')).stations;
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.json': 'application/json', '.css': 'text/css', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
 
 export async function nearest(lat, lng, limit = 3, minKw = 0) {
-  let statusMap = null, liveError = null;
-  try { statusMap = await getStatusMap(); } catch (e) { liveError = e.message; }
-  const results = rank(stations, { lat, lng }, { limit, statusMap, minKw });
-  return { origin: { lat, lng }, live: !!statusMap, liveError, distance: 'haversine (straight line), not driving distance', results };
+  let statusMap = null, liveLocations = null, liveError = null, liveSource = null;
+  try {
+    // Cover enough nearby sites that a busy closest charger can lose to a free one a bit further out.
+    const radiusM = searchRadiusM(stations, { lat, lng }, { minKw, want: Math.max(60, limit * 10) });
+    const live = await getLiveStatus(process.env, { lat, lng, radiusM });
+    if (live) {
+      liveSource = live.source;
+      statusMap = live.statusMap || null;
+      liveLocations = live.locations || null;
+    }
+  } catch (e) { liveError = e.message; }
+  const hasLive = !!(statusMap || liveLocations);
+  const results = rank(stations, { lat, lng }, { limit, statusMap, liveLocations, minKw, onlyAvailable: hasLive });
+  return {
+    origin: { lat, lng }, live: hasLive, liveSource: hasLive ? liveSource : null, liveError,
+    distance: 'haversine (straight line), not driving distance', results,
+  };
 }
 
 // Optional: push a destination to the car via Tesla Fleet API (through Tesla's vehicle-command proxy, which signs it).

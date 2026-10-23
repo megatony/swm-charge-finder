@@ -1,0 +1,65 @@
+{
+  "_comment": "SYNTHETIC OCPDB /locations page shaped like the MobiData BW public API (source datex2_e_clearing_net). Coordinates sit on real SWM register sites so location matching can be tested offline. Statuses and CO_ ids are made up.",
+  "total_count": 6,
+  "items": [
+    {
+      "name": "Tal 36",
+      "address": "Tal 36",
+      "city": "München",
+      "operator": { "name": "SWM Versorgungs GmbH" },
+      "coordinates": { "latitude": 48.135646, "longitude": 11.580395, "lat": 48.135646, "lon": 11.580395 },
+      "evses": [
+        { "evse_id": "CO_1001", "status": "CHARGING", "status_last_updated": "2026-10-23T20:00:00Z" },
+        { "evse_id": "CO_1002", "status": "BLOCKED", "status_last_updated": "2026-10-23T19:00:00Z" },
+        { "evse_id": "CO_1003", "status": "REMOVED", "status_last_updated": "2026-09-01T00:00:00Z" }
+      ]
+    },
+    {
+      "name": "Tal 36 nearby other post",
+      "address": "Tal 36",
+      "operator": { "name": "SWM Versorgungs GmbH" },
+      "coordinates": { "lat": 48.135916, "lon": 11.580395 },
+      "evses": [
+        { "evse_id": "CO_1101", "status": "AVAILABLE", "status_last_updated": "2026-10-23T20:30:00Z" }
+      ]
+    },
+    {
+      "name": "Leopoldstr. gg. 81",
+      "address": "Leopoldstr. gg. 81",
+      "operator": { "name": "SWM Versorgungs GmbH" },
+      "coordinates": { "lat": 48.16317, "lon": 11.58655 },
+      "evses": [
+        { "evse_id": "CO_2001", "status": "AVAILABLE", "status_last_updated": "2026-10-23T23:00:00Z" },
+        { "evse_id": "CO_2002", "status": "OUTOFORDER", "last_updated": "2026-10-23T22:00:00Z" },
+        { "evse_id": "CO_2003", "status": "UNKNOWN", "status_last_updated": "2026-10-23T21:00:00Z" }
+      ]
+    },
+    {
+      "name": "city centre decoy",
+      "address": "Marienplatz",
+      "operator": { "name": "SWM Versorgungs GmbH" },
+      "coordinates": { "lat": 48.137, "lon": 11.575 },
+      "evses": [
+        { "evse_id": "CO_3001", "status": "AVAILABLE", "status_last_updated": "2026-10-23T23:10:00Z" }
+      ]
+    },
+    {
+      "name": "other operator on Leopold",
+      "address": "Leopoldstr. gg. 81",
+      "operator": { "name": "Ionity GmbH" },
+      "coordinates": { "lat": 48.16317, "lon": 11.58655 },
+      "evses": [
+        { "evse_id": "CO_9001", "status": "AVAILABLE", "status_last_updated": "2026-10-23T23:30:00Z" }
+      ]
+    },
+    {
+      "name": "Pacellistr. removed",
+      "address": "Pacellistr. 1a",
+      "operator": { "name": "SWM Versorgungs GmbH" },
+      "coordinates": { "lat": 48.140139, "lon": 11.571591 },
+      "evses": [
+        { "evse_id": "CO_4001", "status": "REMOVED", "status_last_updated": "2026-08-01T00:00:00Z" }
+      ]
+    }
+  ]
+}

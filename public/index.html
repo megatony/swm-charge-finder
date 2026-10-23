@@ -58,7 +58,10 @@
   .chip { background:var(--surface-2); border-radius:999px; padding:5px 14px; font-size:17px; font-weight:600; white-space:nowrap; }
   .chip.fast { background:#10233f; color:#93c5fd; }
   .chip.free { background:#0f2e1b; color:var(--accent); }
+  .chip.now { background:var(--accent); color:var(--accent-ink); font-weight:800; }
+  .chip.busy { background:#3a2410; color:#fdba74; }
   .chip.unknown { background:var(--warn-bg); color:var(--warn); }
+  .chip.age { background:transparent; color:var(--muted); font-weight:600; padding-left:2px; }
   .go { background:var(--accent); color:var(--accent-ink); min-width:170px; font-size:26px; grid-row:1 / span 3; grid-column:2; }
   .card.top .go { min-width:300px; min-height:96px; font-size:28px; }
   .label { color:var(--muted); font-size:15px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; margin:22px 2px 0; }
@@ -80,7 +83,7 @@
     <div class="logo" aria-hidden="true"><svg viewBox="0 0 64 64"><path d="M36 4 12 36h15l-4 24 25-33H33z" fill="#04130a"/></svg></div>
     <div>
       <h1>SWM Charge Finder</h1>
-      <div class="tagline">Nearest Stadtwerke München charger · one tap to navigate</div>
+      <div class="tagline">Nearest Stadtwerke München charger · see what’s free right now</div>
     </div>
   </header>
 
@@ -88,6 +91,7 @@
   <div class="toolbar">
     <button id="toggleManual" aria-expanded="false">✍️ Enter location</button>
     <button id="fast" class="toggle" aria-pressed="false">🚀 Fast only (≥ 50 kW)</button>
+    <button id="freeOnly" class="toggle" aria-pressed="false">🟢 Only show free</button>
   </div>
   <form id="manual" autocomplete="off">
     <input id="q" placeholder="Address or coordinates, e.g. 48.137, 11.575" aria-label="Address or coordinates">
@@ -102,31 +106,57 @@
     <p>Station data: <a href="https://www.bundesnetzagentur.de/ladesaeulenkarte" target="_blank" rel="noopener">Ladesäulenregister</a> © Bundesnetzagentur.de (as of 1 Sep 2026),
       licensed under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>. Modified: filtered to SWM-operated sites, misplaced coordinates cleaned.</p>
     <p>Address search: <a href="https://nominatim.openstreetmap.org/" target="_blank" rel="noopener">Nominatim</a>, © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>. Routes open in Google Maps. Distances are straight-line.</p>
-    <p>🔜 Live availability (free / occupied) is coming via the <a href="https://mobilithek.info" target="_blank" rel="noopener">Mobilithek</a> AFIR feed.
+    <p>Live availability: <a href="https://www.mobidata-bw.de/" target="_blank" rel="noopener">MobiData BW</a> / <a href="https://e-clearing.net/" target="_blank" rel="noopener">e-clearing.net</a>
+      (Open ChargePoint DataBase). Available counts as free, charging or blocked as occupied, out of order or unknown as unavailable.
       Independent project, not affiliated with SWM or Tesla. <a href="https://github.com/megatony/swm-charge-finder" target="_blank" rel="noopener">Source on GitHub</a>.</p>
   </footer>
 </main>
 
 <script type="module">
-import { rank, plugLabels } from './core.js';
+import { rank, plugLabels, fetchOcpdbLocations, searchRadiusM } from './core.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const LIMIT = 3;
-let minKw = 0, stationsCache = null, last = null;
+const LIVE_TTL_MS = 60_000;
+let minKw = 0, onlyFree = false, stationsCache = null, last = null, runId = 0;
+const liveCache = new Map();
 
-async function getNearest(lat, lng) {
-  try { // Backend first (adds live status when configured)…
-    const r = await fetch(`/api/nearest?lat=${lat}&lng=${lng}&limit=${LIMIT}&minKw=${minKw}`);
-    if (r.ok && (r.headers.get('content-type') || '').includes('json')) return await r.json();
-  } catch {}
-  // …otherwise (static hosting such as GitHub Pages) rank in the browser.
+async function getStations() {
   if (!stationsCache) {
     const r = await fetch('./stations.json');
     if (!r.ok) throw new Error(`station data HTTP ${r.status}`);
     stationsCache = (await r.json()).stations;
   }
-  return { live: false, results: rank(stationsCache, { lat, lng }, { limit: LIMIT, minKw }) };
+  return stationsCache;
+}
+
+// Reuse a recent circle around this position when it already covers the radius we need.
+async function loadLive(lat, lng, radiusM) {
+  const id = `${lat.toFixed(3)}|${lng.toFixed(3)}`;
+  for (const entry of liveCache.values()) {
+    if (entry.id === id && entry.radiusM >= radiusM - 50 && Date.now() - entry.at < LIVE_TTL_MS) return entry.locations;
+  }
+  const locations = await fetchOcpdbLocations({ lat, lng, radiusM });
+  liveCache.set(`${id}|${Math.round(radiusM)}`, { id, radiusM, at: Date.now(), locations });
+  return locations;
+}
+
+function formatUpdated(iso) {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return '';
+  const min = Math.round((Date.now() - t) / 60000);
+  if (min < 1) return 'status changed just now';
+  if (min < 60) return `status changed ${min} min ago`;
+  const hours = Math.round(min / 60);
+  if (hours < 36) return `status changed ${hours} h ago`;
+  return 'status changed ' + new Date(t).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+function newestStatus(results) {
+  let best = null;
+  for (const s of results) if (s.statusUpdated && (!best || s.statusUpdated > best)) best = s.statusUpdated;
+  return best;
 }
 
 function notice(kind, html) { $('notice').innerHTML = html ? `<div class="notice ${kind}">${html}</div>` : ''; }
@@ -141,40 +171,91 @@ function connectorChips(points) {
       return `<span class="chip${+kw >= 50 ? ' fast' : ''}">${n}× ${esc(label)} · ${esc(kw)} kW</span>`; }).join('');
 }
 
-function card(s, i) {
+function availabilityChips(s, feedLoaded) {
+  if (!feedLoaded) return '';
+  if (!s.live) return '<span class="chip unknown">availability unknown</span>';
+  const bits = [`${s.freeCount} free`];
+  if (s.occupiedCount) bits.push(`${s.occupiedCount} occupied`);
+  if (s.unavailableCount) bits.push(`${s.unavailableCount} unavailable`);
+  const tone = s.freeCount > 0 ? 'free' : (s.occupiedCount ? 'busy' : 'unknown');
+  const badge = s.freeCount > 0 ? '<span class="chip now">Free now</span>' : '';
+  const when = s.statusUpdated
+    ? `<span class="chip age" title="${esc(s.statusUpdated)}">${esc(formatUpdated(s.statusUpdated))}</span>` : '';
+  return `${badge}<span class="chip ${tone}">${bits.join(' · ')}</span>${when}`;
+}
+
+function card(s, i, feedLoaded) {
   const top = i === 0;
-  const status = s.live
-    ? `<span class="chip free">${s.freeCount}/${s.points.length} free</span>`
-    : `<span class="chip unknown">availability unknown</span>`;
   const km = s.distanceKm < 1 ? `${Math.round(s.distanceKm * 1000)} m` : `${s.distanceKm.toFixed(1)} km`;
   return `<div class="card${top ? ' top' : ''}">
     <div class="head"><span class="addr">${esc(s.address)}</span><span class="dist">${km}</span></div>
     <div class="city">${esc(s.city)} · up to ${esc(s.maxKw)} kW · ${s.points.length} charge point${s.points.length === 1 ? '' : 's'}</div>
-    <div class="chips">${status}${connectorChips(s.points)}</div>
+    <div class="chips">${availabilityChips(s, feedLoaded)}${connectorChips(s.points)}</div>
     <a class="btn go" href="${esc(s.navUrl)}" target="_blank" rel="noopener">${top ? 'Navigate ➜' : 'Go ➜'}</a>
   </div>`;
 }
 
 function render(data) {
-  notice('warn', data.live ? '' : '⚠️ <span>Live availability isn’t connected yet: showing the nearest SWM chargers, but not whether they are free.</span>');
   if (!data.results.length) {
-    $('list').innerHTML = `<div class="card empty"><b>No matching charger found</b>${minKw ? 'Try turning off “Fast only”.' : 'No free SWM charge point nearby right now.'}</div>`;
+    const hint = data.live && onlyFree ? 'No free SWM charge point nearby right now.'
+      : minKw ? 'Try turning off “Fast only”.' : 'No SWM charger nearby.';
+    $('list').innerHTML = `<div class="card empty"><b>No matching charger found</b>${hint}</div>`;
     return;
   }
-  $('list').innerHTML = `<div class="label">Nearest chargers</div>` + data.results.map(card).join('');
+  const label = onlyFree && data.live ? 'Nearest free chargers' : 'Nearest chargers';
+  $('list').innerHTML = `<div class="label">${label}</div>` + data.results.map((s, i) => card(s, i, data.live)).join('');
+}
+
+function statusLine(lat, lng, live, results) {
+  const bits = [`📍 ${lat.toFixed(4)}, ${lng.toFixed(4)}`];
+  if (minKw) bits.push('fast chargers only');
+  if (onlyFree && live) bits.push('free only');
+  if (live) {
+    const when = formatUpdated(newestStatus(results || []));
+    const age = when ? ` · newest status ${when.replace(/^status changed /, '')}` : '';
+    bits.push(`live · MobiData BW / e-clearing.net${age}`);
+  }
+  return bits.join(' · ');
 }
 
 async function run(lat, lng) {
+  const id = ++runId;
   last = { lat, lng };
-  $('status').textContent = `Searching near ${lat.toFixed(4)}, ${lng.toFixed(4)}…`;
-  try {
-    const data = await getNearest(lat, lng);
-    $('status').textContent = `📍 ${lat.toFixed(4)}, ${lng.toFixed(4)}${minKw ? ' · fast chargers only' : ''}`;
-    render(data);
-  } catch (e) {
+  notice();
+  $('status').textContent = onlyFree
+    ? `Checking which chargers are free near ${lat.toFixed(4)}, ${lng.toFixed(4)}…`
+    : `Searching near ${lat.toFixed(4)}, ${lng.toFixed(4)}…`;
+  let stations;
+  try { stations = await getStations(); }
+  catch (e) {
+    if (id !== runId) return;
     $('status').textContent = '';
     notice('err', `❌ <span>Couldn’t load charger data (${esc(e.message)}). Check your connection and try again.</span>`);
+    return;
   }
+  if (id !== runId) return;
+  const origin = { lat, lng };
+  const rankOpts = { limit: LIMIT, minKw, onlyAvailable: false };
+  if (!onlyFree) {
+    $('status').textContent = statusLine(lat, lng, false);
+    render({ live: false, results: rank(stations, origin, rankOpts) });
+  }
+  let liveLocations = null;
+  try {
+    const radiusM = searchRadiusM(stations, origin, { minKw, want: 60 });
+    liveLocations = await loadLive(lat, lng, radiusM);
+  } catch { liveLocations = null; }
+  if (id !== runId) return;
+  if (!liveLocations) {
+    // API down: keep the static list and don't pretend we know what is free.
+    if (onlyFree) notice('warn', '⚠️ <span>Live availability is unavailable right now, so free and occupied can’t be shown. Listing the nearest chargers instead.</span>');
+    $('status').textContent = statusLine(lat, lng, false);
+    render({ live: false, results: rank(stations, origin, rankOpts) });
+    return;
+  }
+  const results = rank(stations, origin, { ...rankOpts, liveLocations, onlyAvailable: onlyFree });
+  $('status').textContent = statusLine(lat, lng, true, results);
+  render({ live: true, results });
 }
 
 function openManual(open = true) {
@@ -207,6 +288,11 @@ $('toggleManual').onclick = () => openManual(!$('manual').classList.contains('op
 $('fast').onclick = () => {
   minKw = minKw ? 0 : 50;
   $('fast').setAttribute('aria-pressed', String(!!minKw));
+  if (last) run(last.lat, last.lng);
+};
+$('freeOnly').onclick = () => {
+  onlyFree = !onlyFree;
+  $('freeOnly').setAttribute('aria-pressed', String(onlyFree));
   if (last) run(last.lat, last.lng);
 };
 $('manual').onsubmit = async (ev) => {
