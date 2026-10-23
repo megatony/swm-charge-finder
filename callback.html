@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tesla OAuth callback</title>
+<style>body{font-family:sans-serif;padding:2rem;background:#111;color:#eee}code{display:block;word-break:break-all;background:#222;padding:1rem;border-radius:6px;font-size:1.1rem}button{margin-top:1rem;padding:.7rem 1.2rem;font-size:1rem}</style></head>
+<body><h1>Tesla yetkilendirme kodu</h1>
+<p id="msg">Kod aşağıda. Kopyalayıp Grok Bot'a gönder.</p>
+<code id="code">—</code>
+<button id="copy">Kopyala</button>
+<p id="extra"></p>
+<script>
+const p=new URLSearchParams(location.search);
+const c=p.get('code'),e=p.get('error');
+const el=document.getElementById('code');
+if(c){el.textContent=c;}else{el.textContent='(kod yok)';document.getElementById('msg').textContent=e?('Hata: '+e+' '+(p.get('error_description')||'')):'URL içinde ?code= parametresi bulunamadı.';}
+if(p.get('state'))document.getElementById('extra').textContent='state: '+p.get('state');
+document.getElementById('copy').onclick=()=>{if(c)navigator.clipboard.writeText(c).then(()=>{document.getElementById('copy').textContent='Kopyalandı';});};
+</script></body></html>
