@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b0e13">
+<meta name="description" content="Find the nearest SWM (Stadtwerke München) EV charger and navigate there with one tap. Built for the Tesla browser.">
+<title>SWM Charge Finder</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2322c55e'/%3E%3Cpath d='M36 6 14 36h14l-4 22 22-30H32z' fill='%230b0e13'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg:#0b0e13; --surface:#151a22; --surface-2:#1d2430; --line:#2a3342;
+    --fg:#f3f5f8; --muted:#9aa4b2; --accent:#22c55e; --accent-ink:#04130a;
+    --blue:#3b82f6; --warn:#f59e0b; --warn-bg:#2a2110; --err:#f87171; --err-bg:#2a1414;
+    --radius:20px;
+  }
+  * { box-sizing:border-box; }
+  html { -webkit-text-size-adjust:100%; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:20px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  main { max-width:1080px; margin:0 auto; padding:28px 24px 40px; }
+  header { display:flex; align-items:center; gap:16px; margin-bottom:22px; }
+  .logo { width:56px; height:56px; border-radius:16px; background:var(--accent); display:grid; place-items:center; flex:none; }
+  .logo svg { width:32px; height:32px; }
+  h1 { font-size:34px; line-height:1.1; margin:0; letter-spacing:-.01em; }
+  .tagline { color:var(--muted); font-size:18px; margin-top:4px; }
+
+  button, .btn { appearance:none; border:0; border-radius:16px; font:inherit; font-weight:700; color:var(--fg);
+    cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:10px;
+    min-height:72px; padding:0 26px; font-size:22px; background:var(--surface-2); transition:filter .15s, transform .05s; }
+  button:active, .btn:active { transform:scale(.985); }
+  button:hover, .btn:hover { filter:brightness(1.12); }
+  button:disabled { opacity:.6; cursor:progress; }
+  .primary { width:100%; min-height:100px; font-size:30px; background:var(--accent); color:var(--accent-ink); }
+  .toolbar { display:flex; gap:12px; flex-wrap:wrap; margin-top:14px; }
+  .toolbar button { flex:1 1 240px; }
+  .toggle[aria-pressed="true"] { background:#0f3a22; color:var(--accent); box-shadow:inset 0 0 0 2px var(--accent); }
+
+  #manual { display:none; gap:12px; margin-top:14px; }
+  #manual.open { display:flex; }
+  input { flex:1; min-width:0; font:inherit; font-size:22px; min-height:72px; padding:0 20px; border-radius:16px;
+    border:2px solid var(--line); background:#0f131a; color:var(--fg); }
+  input:focus { outline:none; border-color:var(--blue); }
+  #manual button { background:var(--blue); }
+
+  #status { margin:18px 2px 6px; color:var(--muted); font-size:18px; min-height:26px; }
+  .notice { border-radius:14px; padding:14px 18px; font-size:17px; margin:10px 0; display:flex; gap:10px; }
+  .notice.warn { background:var(--warn-bg); color:#fcd34d; }
+  .notice.err { background:var(--err-bg); color:#fecaca; }
+
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:22px 24px; margin:14px 0;
+    display:grid; grid-template-columns:1fr auto; gap:6px 20px; align-items:center; }
+  .card.top { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+  .card .head { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }
+  .addr { font-size:26px; font-weight:750; }
+  .dist { font-size:24px; font-weight:750; color:var(--accent); white-space:nowrap; }
+  .city { color:var(--muted); font-size:18px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  .chip { background:var(--surface-2); border-radius:999px; padding:5px 14px; font-size:17px; font-weight:600; white-space:nowrap; }
+  .chip.fast { background:#10233f; color:#93c5fd; }
+  .chip.free { background:#0f2e1b; color:var(--accent); }
+  .chip.unknown { background:var(--warn-bg); color:var(--warn); }
+  .go { background:var(--accent); color:var(--accent-ink); min-width:170px; font-size:26px; grid-row:1 / span 3; grid-column:2; }
+  .card.top .go { min-width:300px; min-height:96px; font-size:28px; }
+  .label { color:var(--muted); font-size:15px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; margin:22px 2px 0; }
+  .empty { text-align:center; color:var(--muted); padding:34px 24px; display:block; }
+  .empty b { display:block; color:var(--fg); font-size:24px; margin-bottom:6px; }
+  @media (max-width:700px) {
+    .card { grid-template-columns:1fr; }
+    .go, .card.top .go { grid-row:auto; grid-column:1; width:100%; min-width:0; margin-top:10px; }
+  }
+
+  footer { color:var(--muted); font-size:14px; line-height:1.55; margin-top:36px; padding-top:18px; border-top:1px solid var(--line); }
+  footer a { color:#cbd5e1; }
+  footer p { margin:4px 0; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="logo" aria-hidden="true"><svg viewBox="0 0 64 64"><path d="M36 4 12 36h15l-4 24 25-33H33z" fill="#04130a"/></svg></div>
+    <div>
+      <h1>SWM Charge Finder</h1>
+      <div class="tagline">Nearest Stadtwerke München charger · one tap to navigate</div>
+    </div>
+  </header>
+
+  <button id="find" class="primary">⚡ Navigate to nearest charger</button>
+  <div class="toolbar">
+    <button id="toggleManual" aria-expanded="false">✍️ Enter location</button>
+    <button id="fast" class="toggle" aria-pressed="false">🚀 Fast only (≥ 50 kW)</button>
+  </div>
+  <form id="manual" autocomplete="off">
+    <input id="q" placeholder="Address or coordinates, e.g. 48.137, 11.575" aria-label="Address or coordinates">
+    <button id="go" type="submit">Search</button>
+  </form>
+
+  <div id="status" role="status" aria-live="polite"></div>
+  <div id="notice"></div>
+  <div id="list"></div>
+
+  <footer>
+    <p>Station data: <a href="https://www.bundesnetzagentur.de/ladesaeulenkarte" target="_blank" rel="noopener">Ladesäulenregister</a> © Bundesnetzagentur.de (as of 1 Sep 2026),
+      licensed under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>. Modified: filtered to SWM-operated sites, misplaced coordinates cleaned.</p>
+    <p>Address search: <a href="https://nominatim.openstreetmap.org/" target="_blank" rel="noopener">Nominatim</a>, © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>. Routes open in Google Maps. Distances are straight-line.</p>
+    <p>🔜 Live availability (free / occupied) is coming via the <a href="https://mobilithek.info" target="_blank" rel="noopener">Mobilithek</a> AFIR feed.
+      Independent project, not affiliated with SWM or Tesla. <a href="https://github.com/megatony/swm-charge-finder" target="_blank" rel="noopener">Source on GitHub</a>.</p>
+  </footer>
+</main>
+
+<script type="module">
+import { rank, plugLabels } from './core.js';
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const LIMIT = 3;
+let minKw = 0, stationsCache = null, last = null;
+
+async function getNearest(lat, lng) {
+  try { // Backend first (adds live status when configured)…
+    const r = await fetch(`/api/nearest?lat=${lat}&lng=${lng}&limit=${LIMIT}&minKw=${minKw}`);
+    if (r.ok && (r.headers.get('content-type') || '').includes('json')) return await r.json();
+  } catch {}
+  // …otherwise (static hosting such as GitHub Pages) rank in the browser.
+  if (!stationsCache) {
+    const r = await fetch('./stations.json');
+    if (!r.ok) throw new Error(`station data HTTP ${r.status}`);
+    stationsCache = (await r.json()).stations;
+  }
+  return { live: false, results: rank(stationsCache, { lat, lng }, { limit: LIMIT, minKw }) };
+}
+
+function notice(kind, html) { $('notice').innerHTML = html ? `<div class="notice ${kind}">${html}</div>` : ''; }
+
+function connectorChips(points) {
+  const groups = new Map(); // "CCS|150" -> count
+  for (const p of points) for (const label of plugLabels(p.plug)) {
+    const key = `${label}|${p.kw ?? '?'}`; groups.set(key, (groups.get(key) || 0) + 1);
+  }
+  return [...groups].sort((a, b) => (parseFloat(b[0].split('|')[1]) || 0) - (parseFloat(a[0].split('|')[1]) || 0))
+    .map(([key, n]) => { const [label, kw] = key.split('|');
+      return `<span class="chip${+kw >= 50 ? ' fast' : ''}">${n}× ${esc(label)} · ${esc(kw)} kW</span>`; }).join('');
+}
+
+function card(s, i) {
+  const top = i === 0;
+  const status = s.live
+    ? `<span class="chip free">${s.freeCount}/${s.points.length} free</span>`
+    : `<span class="chip unknown">availability unknown</span>`;
+  const km = s.distanceKm < 1 ? `${Math.round(s.distanceKm * 1000)} m` : `${s.distanceKm.toFixed(1)} km`;
+  return `<div class="card${top ? ' top' : ''}">
+    <div class="head"><span class="addr">${esc(s.address)}</span><span class="dist">${km}</span></div>
+    <div class="city">${esc(s.city)} · up to ${esc(s.maxKw)} kW · ${s.points.length} charge point${s.points.length === 1 ? '' : 's'}</div>
+    <div class="chips">${status}${connectorChips(s.points)}</div>
+    <a class="btn go" href="${esc(s.navUrl)}" target="_blank" rel="noopener">${top ? 'Navigate ➜' : 'Go ➜'}</a>
+  </div>`;
+}
+
+function render(data) {
+  notice('warn', data.live ? '' : '⚠️ <span>Live availability isn’t connected yet: showing the nearest SWM chargers, but not whether they are free.</span>');
+  if (!data.results.length) {
+    $('list').innerHTML = `<div class="card empty"><b>No matching charger found</b>${minKw ? 'Try turning off “Fast only”.' : 'No free SWM charge point nearby right now.'}</div>`;
+    return;
+  }
+  $('list').innerHTML = `<div class="label">Nearest chargers</div>` + data.results.map(card).join('');
+}
+
+async function run(lat, lng) {
+  last = { lat, lng };
+  $('status').textContent = `Searching near ${lat.toFixed(4)}, ${lng.toFixed(4)}…`;
+  try {
+    const data = await getNearest(lat, lng);
+    $('status').textContent = `📍 ${lat.toFixed(4)}, ${lng.toFixed(4)}${minKw ? ' · fast chargers only' : ''}`;
+    render(data);
+  } catch (e) {
+    $('status').textContent = '';
+    notice('err', `❌ <span>Couldn’t load charger data (${esc(e.message)}). Check your connection and try again.</span>`);
+  }
+}
+
+function openManual(open = true) {
+  $('manual').classList.toggle('open', open);
+  $('toggleManual').setAttribute('aria-expanded', String(open));
+  if (open) $('q').focus();
+}
+
+$('find').onclick = () => {
+  notice();
+  if (!navigator.geolocation) {
+    $('status').textContent = '';
+    notice('err', '📍 <span>This browser can’t share your location. Enter an address or coordinates instead.</span>');
+    return openManual();
+  }
+  $('find').disabled = true;
+  $('status').textContent = 'Getting your location…';
+  navigator.geolocation.getCurrentPosition(
+    (p) => { $('find').disabled = false; run(p.coords.latitude, p.coords.longitude); },
+    (e) => {
+      $('find').disabled = false; $('status').textContent = '';
+      const why = e.code === 1 ? 'Location access was denied. Allow location for this site in the browser settings, or'
+        : e.code === 3 ? 'Getting your location timed out. Try again, or' : `Couldn’t get your location (${esc(e.message)}).`;
+      notice('err', `📍 <span>${why} enter an address below.</span>`);
+      openManual();
+    },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 });
+};
+$('toggleManual').onclick = () => openManual(!$('manual').classList.contains('open'));
+$('fast').onclick = () => {
+  minKw = minKw ? 0 : 50;
+  $('fast').setAttribute('aria-pressed', String(!!minKw));
+  if (last) run(last.lat, last.lng);
+};
+$('manual').onsubmit = async (ev) => {
+  ev.preventDefault();
+  const q = $('q').value.trim(); if (!q) return;
+  const m = q.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+  if (m) return run(+m[1], +m[2]);
+  notice(); $('status').textContent = 'Looking up address…';
+  try {
+    const r = await (await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=de&q=' + encodeURIComponent(q))).json();
+    if (!r[0]) { $('status').textContent = ''; return notice('err', '🔎 <span>Address not found. Try adding the city, e.g. “Leopoldstr. 81, München”.</span>'); }
+    run(+r[0].lat, +r[0].lon);
+  } catch { $('status').textContent = ''; notice('err', '🔎 <span>Address search failed. Check your connection or enter coordinates.</span>'); }
+};
+
+const qs = new URLSearchParams(location.search); // ?lat=..&lng=.. for testing and deep links
+if (qs.get('lat')) run(+qs.get('lat'), +qs.get('lng'));
+</script>
+</body>
+</html>

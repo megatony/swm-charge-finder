@@ -1,0 +1,16 @@
+{
+  "name": "swm-charge-finder",
+  "version": "1.0.0",
+  "description": "Find the nearest SWM (Stadtwerke München) EV charger and navigate there with one tap. Built for the Tesla browser.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Bahadır Akın Akgül",
+  "repository": "github:megatony/swm-charge-finder",
+  "homepage": "https://megatony.github.io/swm-charge-finder/",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.js",
+    "build-data": "python3 scripts/build-static.py data/lsr.csv",
+    "test": "node test/test.js"
+  }
+}

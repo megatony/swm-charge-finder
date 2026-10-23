@@ -1,0 +1,18 @@
+# Raw register download (~55 MB) – fetch it yourself, see README
+data/
+# Local research dumps
+research/
+# Secrets, certificates and keys – never commit
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+# Node / OS / editor
+node_modules/
+npm-debug.log*
+.DS_Store
+.vscode/
+.idea/

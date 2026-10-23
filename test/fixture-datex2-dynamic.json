@@ -1,0 +1,5 @@
+{"_comment":"SYNTHETIC test fixture shaped like DATEX II v3 AFIR-Recharging-Dynamic. Statuses are made up; EVSE IDs are real SWM IDs from the BNetzA register, used only to test matching.",
+ "messageContainer":{"payload":[{"aegiEnergyInfrastructureStatusPublication":{"energyInfrastructureSiteStatus":[{"reference":{"idG":"SITE1"},"energyInfrastructureStationStatus":[{"refillPointStatus":[
+  {"reference":{"idG":"DE*SWM*E000401"},"status":{"value":"charging"}},
+  {"reference":{"idG":"DE*SWM*E000402"},"status":{"value":"available"}}
+ ]}]}]}}]}}

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Tesla sign-in · SWM Charge Finder</title>
+<style>
+  body { margin:0; font:18px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:#0b0e13; color:#f3f5f8; }
+  main { max-width:760px; margin:0 auto; padding:40px 24px; }
+  h1 { font-size:28px; margin:0 0 8px; }
+  p { color:#9aa4b2; }
+  code { display:block; word-break:break-all; background:#151a22; border:1px solid #2a3342; padding:18px; border-radius:14px; font-size:18px; color:#f3f5f8; }
+  button { margin-top:16px; min-height:60px; padding:0 26px; font:inherit; font-weight:700; border:0; border-radius:14px; background:#22c55e; color:#04130a; cursor:pointer; }
+  .err { color:#fecaca; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Tesla authorization code</h1>
+  <p id="msg">Your code is below. Copy it and send it back to Grok Bot to finish connecting your car.</p>
+  <code id="code">—</code>
+  <button id="copy" type="button">Copy code</button>
+  <p id="extra"></p>
+</main>
+<script>
+  // Tesla's OAuth redirect lands here with ?code=…&state=… (or ?error=…). Nothing is sent anywhere; it is only displayed.
+  const params = new URLSearchParams(location.search);
+  const code = params.get('code'), error = params.get('error');
+  const el = document.getElementById('code'), msg = document.getElementById('msg');
+  if (code) el.textContent = code;
+  else {
+    el.textContent = '(no code)';
+    msg.className = 'err';
+    msg.textContent = error ? `Error: ${error} ${params.get('error_description') || ''}` : 'No ?code= parameter found in the URL.';
+  }
+  if (params.get('state')) document.getElementById('extra').textContent = 'state: ' + params.get('state');
+  document.getElementById('copy').onclick = () => {
+    if (code) navigator.clipboard.writeText(code).then(() => { document.getElementById('copy').textContent = 'Copied ✓'; });
+  };
+</script>
+</body>
+</html>
