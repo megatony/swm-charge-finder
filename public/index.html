@@ -18,11 +18,15 @@
   html { -webkit-text-size-adjust:100%; }
   body { margin:0; background:var(--bg); color:var(--fg); font:20px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
   main { max-width:1080px; margin:0 auto; padding:28px 24px 40px; }
-  header { display:flex; align-items:center; gap:16px; margin-bottom:22px; }
+  header { display:flex; align-items:flex-start; gap:16px; margin-bottom:22px; }
   .logo { width:56px; height:56px; border-radius:16px; background:var(--accent); display:grid; place-items:center; flex:none; }
   .logo svg { width:32px; height:32px; }
+  .titles { flex:1; min-width:0; }
   h1 { font-size:34px; line-height:1.1; margin:0; letter-spacing:-.01em; }
   .tagline { color:var(--muted); font-size:18px; margin-top:4px; }
+  .lang { display:flex; gap:6px; flex:none; }
+  .lang button { min-height:44px; min-width:56px; padding:0 12px; font-size:16px; border-radius:12px; }
+  .lang button[aria-pressed="true"] { background:#0f3a22; color:var(--accent); box-shadow:inset 0 0 0 2px var(--accent); }
 
   button, .btn { appearance:none; border:0; border-radius:16px; font:inherit; font-weight:700; color:var(--fg);
     cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:10px;
@@ -81,9 +85,13 @@
 <main>
   <header>
     <div class="logo" aria-hidden="true"><svg viewBox="0 0 64 64"><path d="M36 4 12 36h15l-4 24 25-33H33z" fill="#04130a"/></svg></div>
-    <div>
-      <h1>SWM Charge Finder</h1>
-      <div class="tagline">Nearest Stadtwerke München charger · see what’s free right now</div>
+    <div class="titles">
+      <h1 id="title">SWM Charge Finder</h1>
+      <div id="tagline" class="tagline">Nearest Stadtwerke München charger · see what’s free right now</div>
+    </div>
+    <div id="lang-group" class="lang" role="group" aria-label="Language">
+      <button type="button" id="lang-en" aria-pressed="true">EN</button>
+      <button type="button" id="lang-tr" aria-pressed="false">TR</button>
     </div>
   </header>
 
@@ -102,25 +110,54 @@
   <div id="notice"></div>
   <div id="list"></div>
 
-  <footer>
-    <p>Station data: <a href="https://www.bundesnetzagentur.de/ladesaeulenkarte" target="_blank" rel="noopener">Ladesäulenregister</a> © Bundesnetzagentur.de (as of 1 Sep 2026),
-      licensed under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>. Modified: filtered to SWM-operated sites, misplaced coordinates cleaned.</p>
-    <p>Address search: <a href="https://nominatim.openstreetmap.org/" target="_blank" rel="noopener">Nominatim</a>, © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>. Routes open in Google Maps. Distances are straight-line.</p>
-    <p>Live availability: <a href="https://www.mobidata-bw.de/" target="_blank" rel="noopener">MobiData BW</a> / <a href="https://e-clearing.net/" target="_blank" rel="noopener">e-clearing.net</a>
-      (Open ChargePoint DataBase). Available counts as free, charging or blocked as occupied, out of order or unknown as unavailable.
-      Independent project, not affiliated with SWM or Tesla. <a href="https://github.com/megatony/swm-charge-finder" target="_blank" rel="noopener">Source on GitHub</a>.</p>
+  <footer id="footer">
+    <p id="footer-stations">Station data: <a href="https://www.bundesnetzagentur.de/ladesaeulenkarte" target="_blank" rel="noopener">Ladesäulenregister</a> © Bundesnetzagentur.de (as of 1 Sep 2026), licensed under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>. Modified: filtered to SWM-operated sites, misplaced coordinates cleaned.</p>
+    <p id="footer-address">Address search: <a href="https://nominatim.openstreetmap.org/" target="_blank" rel="noopener">Nominatim</a>, © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>. Routes open in Google Maps. Distances are straight-line.</p>
+    <p id="footer-live">Live availability: <a href="https://www.mobidata-bw.de/" target="_blank" rel="noopener">MobiData BW</a> / <a href="https://e-clearing.net/" target="_blank" rel="noopener">e-clearing.net</a> (Open ChargePoint DataBase). Available counts as free, charging or blocked as occupied, out of order or unknown as unavailable. Independent project, not affiliated with SWM or Tesla. <a href="https://github.com/megatony/swm-charge-finder" target="_blank" rel="noopener">Source on GitHub</a>.</p>
   </footer>
 </main>
 
+<script>
+try {
+  var savedLang = localStorage.getItem('swm-lang');
+  var earlyLang = savedLang === 'en' || savedLang === 'tr' ? savedLang
+    : (String(navigator.language || '').toLowerCase().indexOf('tr') === 0 ? 'tr' : 'en');
+  document.documentElement.lang = earlyLang;
+} catch (e) {}
+</script>
 <script type="module">
 import { rank, plugLabels, fetchOcpdbLocations, searchRadiusM } from './core.js';
+import { LANG_STORAGE_KEY, initialLang, translate, formatNumber, formatDateTime } from './i18n.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const LIMIT = 3;
 const LIVE_TTL_MS = 60_000;
-let minKw = 0, onlyFree = false, stationsCache = null, last = null, runId = 0;
+const PLUG_KEYS = {
+  'Type 2': 'plugType2',
+  'Type 2 (tethered cable)': 'plugType2Cable',
+  CCS: 'plugCcs',
+  CHAdeMO: 'plugChademo',
+  Schuko: 'plugSchuko',
+};
+const NOTICE_ICON = {
+  loadFailed: '❌', noGeo: '📍', geoDenied: '📍', geoTimeout: '📍', geoFailed: '📍',
+  addressNotFound: '🔎', addressFailed: '🔎', liveDown: '⚠️',
+};
+let lang = 'en';
+let minKw = 0, onlyFree = false, stationsCache = null, last = null, lastData = null, runId = 0;
+let noticeState = null, statusState = null;
 const liveCache = new Map();
+
+function readStoredLang() {
+  try { return localStorage.getItem(LANG_STORAGE_KEY); } catch { return null; }
+}
+function t(key, vars) { return translate(lang, key, vars); }
+function num(value, options) { return formatNumber(lang, value, options); }
+function plugName(label) {
+  const key = PLUG_KEYS[label];
+  return key ? t(key) : label;
+}
 
 async function getStations() {
   if (!stationsCache) {
@@ -142,15 +179,35 @@ async function loadLive(lat, lng, radiusM) {
   return locations;
 }
 
+function relativeWhen(iso) {
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return '';
+  const minutes = Math.round((Date.now() - ms) / 60000);
+  if (minutes < 1) return t('justNow');
+  if (minutes < 60) return t('minutesAgo', { n: num(minutes) });
+  const hours = Math.round(minutes / 60);
+  if (hours < 36) return t('hoursAgo', { n: num(hours) });
+  return formatDateTime(lang, new Date(ms));
+}
+
 function formatUpdated(iso) {
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return '';
-  const min = Math.round((Date.now() - t) / 60000);
-  if (min < 1) return 'status changed just now';
-  if (min < 60) return `status changed ${min} min ago`;
-  const hours = Math.round(min / 60);
-  if (hours < 36) return `status changed ${hours} h ago`;
-  return 'status changed ' + new Date(t).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const when = relativeWhen(iso);
+  return when ? t('statusChanged', { when }) : '';
+}
+
+function formatCoord(n) {
+  return num(n, { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+}
+function whereText(lat, lng) {
+  return `${formatCoord(lat)} · ${formatCoord(lng)}`;
+}
+function formatDistance(km) {
+  if (km < 1) return t('meters', { n: num(Math.round(km * 1000)) });
+  return t('kilometers', { n: num(km, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) });
+}
+function formatKw(kw) {
+  const n = +kw;
+  return Number.isFinite(n) ? num(n, { maximumFractionDigits: 1 }) : String(kw);
 }
 
 function newestStatus(results) {
@@ -161,6 +218,64 @@ function newestStatus(results) {
 
 function notice(kind, html) { $('notice').innerHTML = html ? `<div class="notice ${kind}">${html}</div>` : ''; }
 
+function paintNotice() {
+  if (!noticeState) { notice(); return; }
+  const { kind, key, vars } = noticeState;
+  notice(kind, `${NOTICE_ICON[key] || ''} <span>${esc(t(key, vars))}</span>`);
+}
+function showNotice(kind, key, vars) {
+  noticeState = key ? { kind, key, vars: vars || {} } : null;
+  paintNotice();
+}
+function paintStatus() {
+  if (!statusState) { $('status').textContent = ''; return; }
+  if (statusState.mode === 'line') {
+    $('status').textContent = statusLine(statusState.lat, statusState.lng, statusState.live, statusState.results);
+    return;
+  }
+  $('status').textContent = t(statusState.key, statusState.vars);
+}
+function setStatus(state) {
+  statusState = state;
+  paintStatus();
+}
+
+function paintFooter() {
+  const a = (href, text) => `<a href="${href}" target="_blank" rel="noopener">${esc(text)}</a>`;
+  $('footer-stations').innerHTML = `${esc(t('footerStationsLead'))} ${a('https://www.bundesnetzagentur.de/ladesaeulenkarte', 'Ladesäulenregister')} ${esc(t('footerStationsMid'))} ${a('https://creativecommons.org/licenses/by/4.0/', 'CC BY 4.0')}${esc(t('footerStationsEnd'))}`;
+  $('footer-address').innerHTML = `${esc(t('footerAddressLead'))} ${a('https://nominatim.openstreetmap.org/', 'Nominatim')}${esc(t('footerAddressMid'))} ${a('https://www.openstreetmap.org/copyright', t('osmContributors'))}${esc(t('footerAddressEnd'))}`;
+  $('footer-live').innerHTML = `${esc(t('footerLiveLead'))} ${a('https://www.mobidata-bw.de/', 'MobiData BW')} / ${a('https://e-clearing.net/', 'e-clearing.net')} ${esc(t('footerLiveRest'))} ${a('https://github.com/megatony/swm-charge-finder', t('footerSource'))}.`;
+}
+
+function applyChrome() {
+  document.documentElement.lang = lang;
+  document.title = t('metaTitle');
+  const meta = document.querySelector('meta[name="description"]');
+  if (meta) meta.setAttribute('content', t('metaDescription'));
+  $('title').textContent = t('title');
+  $('tagline').textContent = t('tagline');
+  $('find').textContent = t('find');
+  $('toggleManual').textContent = t('enterLocation');
+  $('fast').textContent = t('fastOnly');
+  $('freeOnly').textContent = t('onlyFree');
+  $('q').placeholder = t('addressPlaceholder');
+  $('q').setAttribute('aria-label', t('addressLabel'));
+  $('go').textContent = t('search');
+  $('lang-group').setAttribute('aria-label', t('language'));
+  $('lang-en').setAttribute('aria-pressed', String(lang === 'en'));
+  $('lang-tr').setAttribute('aria-pressed', String(lang === 'tr'));
+  paintFooter();
+  paintNotice();
+  paintStatus();
+  if (lastData) render(lastData);
+}
+
+function chooseLang(next) {
+  lang = next === 'tr' ? 'tr' : 'en';
+  try { localStorage.setItem(LANG_STORAGE_KEY, lang); } catch {}
+  applyChrome();
+}
+
 function connectorChips(points) {
   const groups = new Map(); // "CCS|150" -> count
   for (const p of points) for (const label of plugLabels(p.plug)) {
@@ -168,17 +283,18 @@ function connectorChips(points) {
   }
   return [...groups].sort((a, b) => (parseFloat(b[0].split('|')[1]) || 0) - (parseFloat(a[0].split('|')[1]) || 0))
     .map(([key, n]) => { const [label, kw] = key.split('|');
-      return `<span class="chip${+kw >= 50 ? ' fast' : ''}">${n}× ${esc(label)} · ${esc(kw)} kW</span>`; }).join('');
+      const text = t('connector', { count: num(n), label: plugName(label), kw: formatKw(kw) });
+      return `<span class="chip${+kw >= 50 ? ' fast' : ''}">${esc(text)}</span>`; }).join('');
 }
 
 function availabilityChips(s, feedLoaded) {
   if (!feedLoaded) return '';
-  if (!s.live) return '<span class="chip unknown">availability unknown</span>';
-  const bits = [`${s.freeCount} free`];
-  if (s.occupiedCount) bits.push(`${s.occupiedCount} occupied`);
-  if (s.unavailableCount) bits.push(`${s.unavailableCount} unavailable`);
+  if (!s.live) return `<span class="chip unknown">${esc(t('availabilityUnknown'))}</span>`;
+  const bits = [t('countFree', { n: num(s.freeCount) })];
+  if (s.occupiedCount) bits.push(t('countOccupied', { n: num(s.occupiedCount) }));
+  if (s.unavailableCount) bits.push(t('countUnavailable', { n: num(s.unavailableCount) }));
   const tone = s.freeCount > 0 ? 'free' : (s.occupiedCount ? 'busy' : 'unknown');
-  const badge = s.freeCount > 0 ? '<span class="chip now">Free now</span>' : '';
+  const badge = s.freeCount > 0 ? `<span class="chip now">${esc(t('freeNow'))}</span>` : '';
   const when = s.statusUpdated
     ? `<span class="chip age" title="${esc(s.statusUpdated)}">${esc(formatUpdated(s.statusUpdated))}</span>` : '';
   return `${badge}<span class="chip ${tone}">${bits.join(' · ')}</span>${when}`;
@@ -186,34 +302,33 @@ function availabilityChips(s, feedLoaded) {
 
 function card(s, i, feedLoaded) {
   const top = i === 0;
-  const km = s.distanceKm < 1 ? `${Math.round(s.distanceKm * 1000)} m` : `${s.distanceKm.toFixed(1)} km`;
+  const pointsKey = s.points.length === 1 ? 'chargePoint' : 'chargePoints';
+  const detail = `${esc(s.city)} · ${esc(t('upToKw', { kw: formatKw(s.maxKw) }))} · ${esc(t(pointsKey, { n: num(s.points.length) }))}`;
   return `<div class="card${top ? ' top' : ''}">
-    <div class="head"><span class="addr">${esc(s.address)}</span><span class="dist">${km}</span></div>
-    <div class="city">${esc(s.city)} · up to ${esc(s.maxKw)} kW · ${s.points.length} charge point${s.points.length === 1 ? '' : 's'}</div>
+    <div class="head"><span class="addr">${esc(s.address)}</span><span class="dist">${esc(formatDistance(s.distanceKm))}</span></div>
+    <div class="city">${detail}</div>
     <div class="chips">${availabilityChips(s, feedLoaded)}${connectorChips(s.points)}</div>
-    <a class="btn go" href="${esc(s.navUrl)}" target="_blank" rel="noopener">${top ? 'Navigate ➜' : 'Go ➜'}</a>
+    <a class="btn go" href="${esc(s.navUrl)}" target="_blank" rel="noopener">${esc(top ? t('navigate') : t('go'))}</a>
   </div>`;
 }
 
 function render(data) {
   if (!data.results.length) {
-    const hint = data.live && onlyFree ? 'No free SWM charge point nearby right now.'
-      : minKw ? 'Try turning off “Fast only”.' : 'No SWM charger nearby.';
-    $('list').innerHTML = `<div class="card empty"><b>No matching charger found</b>${hint}</div>`;
+    const hint = data.live && onlyFree ? t('noneFree') : minKw ? t('tryFastOff') : t('noneNearby');
+    $('list').innerHTML = `<div class="card empty"><b>${esc(t('noneFound'))}</b>${esc(hint)}</div>`;
     return;
   }
-  const label = onlyFree && data.live ? 'Nearest free chargers' : 'Nearest chargers';
-  $('list').innerHTML = `<div class="label">${label}</div>` + data.results.map((s, i) => card(s, i, data.live)).join('');
+  const label = onlyFree && data.live ? t('nearestFree') : t('nearestChargers');
+  $('list').innerHTML = `<div class="label">${esc(label)}</div>` + data.results.map((s, i) => card(s, i, data.live)).join('');
 }
 
 function statusLine(lat, lng, live, results) {
-  const bits = [`📍 ${lat.toFixed(4)}, ${lng.toFixed(4)}`];
-  if (minKw) bits.push('fast chargers only');
-  if (onlyFree && live) bits.push('free only');
+  const bits = [`📍 ${whereText(lat, lng)}`];
+  if (minKw) bits.push(t('fastOnlyStatus'));
+  if (onlyFree && live) bits.push(t('freeOnlyStatus'));
   if (live) {
-    const when = formatUpdated(newestStatus(results || []));
-    const age = when ? ` · newest status ${when.replace(/^status changed /, '')}` : '';
-    bits.push(`live · MobiData BW / e-clearing.net${age}`);
+    const when = relativeWhen(newestStatus(results || []));
+    bits.push(when ? `${t('liveAttribution')} · ${t('newestStatus', { when })}` : t('liveAttribution'));
   }
   return bits.join(' · ');
 }
@@ -221,24 +336,25 @@ function statusLine(lat, lng, live, results) {
 async function run(lat, lng) {
   const id = ++runId;
   last = { lat, lng };
-  notice();
-  $('status').textContent = onlyFree
-    ? `Checking which chargers are free near ${lat.toFixed(4)}, ${lng.toFixed(4)}…`
-    : `Searching near ${lat.toFixed(4)}, ${lng.toFixed(4)}…`;
+  showNotice();
+  const where = whereText(lat, lng);
+  setStatus({ key: onlyFree ? 'checkingFree' : 'searchingNear', vars: { where } });
   let stations;
   try { stations = await getStations(); }
   catch (e) {
     if (id !== runId) return;
-    $('status').textContent = '';
-    notice('err', `❌ <span>Couldn’t load charger data (${esc(e.message)}). Check your connection and try again.</span>`);
+    setStatus(null);
+    showNotice('err', 'loadFailed', { message: e.message });
     return;
   }
   if (id !== runId) return;
   const origin = { lat, lng };
   const rankOpts = { limit: LIMIT, minKw, onlyAvailable: false };
   if (!onlyFree) {
-    $('status').textContent = statusLine(lat, lng, false);
-    render({ live: false, results: rank(stations, origin, rankOpts) });
+    const data = { live: false, results: rank(stations, origin, rankOpts) };
+    lastData = data;
+    setStatus({ mode: 'line', lat, lng, live: false, results: data.results });
+    render(data);
   }
   let liveLocations = null;
   try {
@@ -248,14 +364,17 @@ async function run(lat, lng) {
   if (id !== runId) return;
   if (!liveLocations) {
     // API down: keep the static list and don't pretend we know what is free.
-    if (onlyFree) notice('warn', '⚠️ <span>Live availability is unavailable right now, so free and occupied can’t be shown. Listing the nearest chargers instead.</span>');
-    $('status').textContent = statusLine(lat, lng, false);
-    render({ live: false, results: rank(stations, origin, rankOpts) });
+    if (onlyFree) showNotice('warn', 'liveDown');
+    const data = { live: false, results: rank(stations, origin, rankOpts) };
+    lastData = data;
+    setStatus({ mode: 'line', lat, lng, live: false, results: data.results });
+    render(data);
     return;
   }
-  const results = rank(stations, origin, { ...rankOpts, liveLocations, onlyAvailable: onlyFree });
-  $('status').textContent = statusLine(lat, lng, true, results);
-  render({ live: true, results });
+  const data = { live: true, results: rank(stations, origin, { ...rankOpts, liveLocations, onlyAvailable: onlyFree }) };
+  lastData = data;
+  setStatus({ mode: 'line', lat, lng, live: true, results: data.results });
+  render(data);
 }
 
 function openManual(open = true) {
@@ -265,21 +384,21 @@ function openManual(open = true) {
 }
 
 $('find').onclick = () => {
-  notice();
+  showNotice();
   if (!navigator.geolocation) {
-    $('status').textContent = '';
-    notice('err', '📍 <span>This browser can’t share your location. Enter an address or coordinates instead.</span>');
+    setStatus(null);
+    showNotice('err', 'noGeo');
     return openManual();
   }
   $('find').disabled = true;
-  $('status').textContent = 'Getting your location…';
+  setStatus({ key: 'gettingLocation' });
   navigator.geolocation.getCurrentPosition(
     (p) => { $('find').disabled = false; run(p.coords.latitude, p.coords.longitude); },
     (e) => {
-      $('find').disabled = false; $('status').textContent = '';
-      const why = e.code === 1 ? 'Location access was denied. Allow location for this site in the browser settings, or'
-        : e.code === 3 ? 'Getting your location timed out. Try again, or' : `Couldn’t get your location (${esc(e.message)}).`;
-      notice('err', `📍 <span>${why} enter an address below.</span>`);
+      $('find').disabled = false;
+      setStatus(null);
+      const key = e.code === 1 ? 'geoDenied' : e.code === 3 ? 'geoTimeout' : 'geoFailed';
+      showNotice('err', key, { message: e.message });
       openManual();
     },
     { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 });
@@ -300,13 +419,19 @@ $('manual').onsubmit = async (ev) => {
   const q = $('q').value.trim(); if (!q) return;
   const m = q.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
   if (m) return run(+m[1], +m[2]);
-  notice(); $('status').textContent = 'Looking up address…';
+  showNotice();
+  setStatus({ key: 'lookingUp' });
   try {
     const r = await (await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=de&q=' + encodeURIComponent(q))).json();
-    if (!r[0]) { $('status').textContent = ''; return notice('err', '🔎 <span>Address not found. Try adding the city, e.g. “Leopoldstr. 81, München”.</span>'); }
+    if (!r[0]) { setStatus(null); return showNotice('err', 'addressNotFound'); }
     run(+r[0].lat, +r[0].lon);
-  } catch { $('status').textContent = ''; notice('err', '🔎 <span>Address search failed. Check your connection or enter coordinates.</span>'); }
+  } catch { setStatus(null); showNotice('err', 'addressFailed'); }
 };
+$('lang-en').onclick = () => chooseLang('en');
+$('lang-tr').onclick = () => chooseLang('tr');
+
+lang = initialLang(readStoredLang(), navigator.language);
+applyChrome();
 
 const qs = new URLSearchParams(location.search); // ?lat=..&lng=.. for testing and deep links
 if (qs.get('lat')) run(+qs.get('lat'), +qs.get('lng'));

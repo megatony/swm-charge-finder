@@ -13,9 +13,10 @@
 ## Features
 
 - **One big button.** "Navigate to nearest charger" reads your position and lists the three closest SWM sites; the top result opens turn-by-turn directions (Google Maps, which hands off to the car's navigation).
-- **Made for the car.** Large touch targets, dark theme, a single ~17 KB page, a ~11 KB script, a ~220 KB station file, and no frameworks, trackers or build step.
+- **Made for the car.** Large touch targets, dark theme, one page plus two small scripts, a ~220 KB station file, and no frameworks, trackers or build step.
 - **Useful details.** Each station shows its distance, max power (kW), connector types (Type 2, CCS, CHAdeMO) with counts, and its address.
 - **Live availability.** Each station shows how many points are free, occupied, or unavailable right now, a **Free now** badge, and the time that status last changed. **Only show free** hides sites with nothing available. If the live feed is down, those details are hidden and the static list still works.
+- **English and Turkish.** The header **EN / TR** toggle switches every label, including live status. English is the default. Turkish is chosen automatically when the browser language starts with `tr`, and the choice is remembered on the device. Numbers and times follow the selected language.
 - **Fast-only filter** for DC chargers at 50 kW or more.
 - **Manual location.** Enter an address (OpenStreetMap Nominatim) or `lat, lng` coordinates when GPS is unavailable or denied.
 - **Deep links.** `?lat=48.137&lng=11.575` runs a search immediately.

@@ -7,6 +7,7 @@ import {
 } from '../public/core.js';
 import { parseDynamic, getLiveStatus, liveSource, ocpdbHeaders } from '../lib/live.js';
 import { nearest } from '../server.js';
+import { STRINGS, LANGS, initialLang, translate, formatNumber, formatDateTime, localeTag } from '../public/i18n.js';
 
 const stations = JSON.parse(readFileSync(new URL('../public/stations.json', import.meta.url))).stations;
 const ocpdbJson = JSON.parse(readFileSync(new URL('./fixture-ocpdb-locations.json', import.meta.url)));
@@ -14,6 +15,45 @@ const MARIENPLATZ = { lat: 48.137, lng: 11.575 };
 const tests = [];
 const test = (name, fn) => tests.push([name, fn]);
 let passed = 0;
+
+test('en and tr dictionaries have the same keys and placeholders', () => {
+  const placeholders = (s) => [...String(s).matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+  const enKeys = Object.keys(STRINGS.en).sort();
+  const trKeys = Object.keys(STRINGS.tr).sort();
+  assert.deepEqual(LANGS, ['en', 'tr']);
+  assert.deepEqual(trKeys, enKeys);
+  assert.ok(enKeys.length > 40);
+  for (const key of enKeys) {
+    assert.equal(typeof STRINGS.en[key], 'string');
+    assert.equal(typeof STRINGS.tr[key], 'string');
+    assert.ok(STRINGS.en[key].length > 0 && STRINGS.tr[key].length > 0);
+    assert.deepEqual(placeholders(STRINGS.tr[key]), placeholders(STRINGS.en[key]), key);
+  }
+  assert.equal(STRINGS.tr.freeNow, 'Şimdi boş');
+  assert.equal(STRINGS.tr.onlyFree, '🟢 Yalnızca boş olanlar');
+  assert.equal(translate('tr', 'countFree', { n: '2' }), '2 boş');
+  assert.equal(translate('tr', 'countOccupied', { n: '1' }), '1 dolu');
+  assert.equal(translate('tr', 'countUnavailable', { n: '1' }), '1 kullanılamaz');
+  assert.equal(translate('tr', 'statusChanged', { when: '5 dk önce' }), 'durum 5 dk önce değişti');
+  assert.equal(translate('en', 'missingKey'), 'missingKey');
+});
+
+test('language defaults to English and follows a Turkish browser only without a saved choice', () => {
+  assert.equal(initialLang(null, 'en-GB'), 'en');
+  assert.equal(initialLang(undefined, ''), 'en');
+  assert.equal(initialLang(null, 'tr'), 'tr');
+  assert.equal(initialLang(null, 'tr-TR'), 'tr');
+  assert.equal(initialLang('tr', 'en-US'), 'tr');
+  assert.equal(initialLang('en', 'tr-TR'), 'en');
+  assert.equal(initialLang('de', 'tr-TR'), 'tr');
+  assert.equal(localeTag('tr'), 'tr-TR');
+  assert.equal(localeTag('en'), 'en-GB');
+  assert.equal(formatNumber('tr', 1.5, { minimumFractionDigits: 1, maximumFractionDigits: 1 }), '1,5');
+  assert.equal(formatNumber('en', 1.5, { minimumFractionDigits: 1, maximumFractionDigits: 1 }), '1.5');
+  const when = new Date('2026-10-24T15:04:00Z');
+  assert.match(formatDateTime('tr', when), /Eki/i);
+  assert.match(formatDateTime('en', when), /Oct/);
+});
 
 test('haversine: Marienplatz -> Hauptbahnhof is about 1.2 km', () => {
   assert(Math.abs(haversineKm({ lat: 48.1374, lng: 11.5755 }, { lat: 48.1402, lng: 11.5600 }) - 1.19) < 0.1);
