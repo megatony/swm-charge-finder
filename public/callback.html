@@ -12,32 +12,68 @@
   p { color:#9aa4b2; }
   code { display:block; word-break:break-all; background:#151a22; border:1px solid #2a3342; padding:18px; border-radius:14px; font-size:18px; color:#f3f5f8; }
   button { margin-top:16px; min-height:60px; padding:0 26px; font:inherit; font-weight:700; border:0; border-radius:14px; background:#22c55e; color:#04130a; cursor:pointer; }
+  .lang { display:flex; gap:8px; margin:0 0 18px; }
+  .lang button { margin-top:0; min-height:44px; min-width:56px; padding:0 12px; font-size:16px; border-radius:12px; background:#1d2430; color:#f3f5f8; }
+  .lang button[aria-pressed="true"] { background:#0f3a22; color:#22c55e; box-shadow:inset 0 0 0 2px #22c55e; }
   .err { color:#fecaca; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Tesla authorization code</h1>
+  <div id="lang-group" class="lang" role="group" aria-label="Language">
+    <button type="button" id="lang-en" aria-pressed="true">EN</button>
+    <button type="button" id="lang-tr" aria-pressed="false">TR</button>
+  </div>
+  <h1 id="heading">Tesla authorization code</h1>
   <p id="msg">Your code is below. Copy it and send it back to Grok Bot to finish connecting your car.</p>
   <code id="code">—</code>
   <button id="copy" type="button">Copy code</button>
   <p id="extra"></p>
 </main>
-<script>
+<script type="module">
   // Tesla's OAuth redirect lands here with ?code=…&state=… (or ?error=…). Nothing is sent anywhere; it is only displayed.
+  import { LANG_STORAGE_KEY, initialLang, translate } from './i18n.js';
   const params = new URLSearchParams(location.search);
   const code = params.get('code'), error = params.get('error');
   const el = document.getElementById('code'), msg = document.getElementById('msg');
-  if (code) el.textContent = code;
-  else {
-    el.textContent = '(no code)';
-    msg.className = 'err';
-    msg.textContent = error ? `Error: ${error} ${params.get('error_description') || ''}` : 'No ?code= parameter found in the URL.';
+  let lang = 'en';
+  const t = (key, vars) => translate(lang, key, vars);
+  function readStoredLang() {
+    try { return localStorage.getItem(LANG_STORAGE_KEY); } catch { return null; }
   }
-  if (params.get('state')) document.getElementById('extra').textContent = 'state: ' + params.get('state');
+  function paint() {
+    document.documentElement.lang = lang;
+    document.title = t('cbTitle');
+    document.getElementById('heading').textContent = t('cbHeading');
+    document.getElementById('lang-group').setAttribute('aria-label', t('language'));
+    document.getElementById('lang-en').setAttribute('aria-pressed', String(lang === 'en'));
+    document.getElementById('lang-tr').setAttribute('aria-pressed', String(lang === 'tr'));
+    document.getElementById('copy').textContent = t('cbCopy');
+    if (code) {
+      el.textContent = code;
+      msg.className = '';
+      msg.textContent = t('cbInstructions');
+    } else {
+      el.textContent = t('cbNoCode');
+      msg.className = 'err';
+      const detail = `${error || ''} ${params.get('error_description') || ''}`.trim();
+      msg.textContent = error ? t('cbError', { detail }) : t('cbMissing');
+    }
+    const state = params.get('state');
+    document.getElementById('extra').textContent = state ? t('cbState', { state }) : '';
+  }
+  function chooseLang(next) {
+    lang = next === 'tr' ? 'tr' : 'en';
+    try { localStorage.setItem(LANG_STORAGE_KEY, lang); } catch {}
+    paint();
+  }
+  document.getElementById('lang-en').onclick = () => chooseLang('en');
+  document.getElementById('lang-tr').onclick = () => chooseLang('tr');
   document.getElementById('copy').onclick = () => {
-    if (code) navigator.clipboard.writeText(code).then(() => { document.getElementById('copy').textContent = 'Copied ✓'; });
+    if (code) navigator.clipboard.writeText(code).then(() => { document.getElementById('copy').textContent = t('cbCopied'); });
   };
+  lang = initialLang(readStoredLang(), navigator.language);
+  paint();
 </script>
 </body>
 </html>
